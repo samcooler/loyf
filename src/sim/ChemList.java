@@ -12,6 +12,7 @@ public class ChemList {
 		resourceList = new int[10];
 	}
 	public int amount(int index) {
+		if(index < -9 || index > NUMCHEMS) return 0;
 		if(index < 0) return resourceList[-1*index];
 		return list[index];
 	}

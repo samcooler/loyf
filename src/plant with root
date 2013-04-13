@@ -1,0 +1,65 @@
+	public void act(boolean recurse) {
+//			log("Acting");
+			log("Arms: "+arms.size());
+			log(chems.listChems());
+
+			// make chemical at base only, and only if none above
+			if(getArm(0) == null & getArm(1) == null) {
+				log("making growth signal at base");
+				chems.changeAmount(1,1); // base
+				chems.changeAmount(20,1); // upward tip
+				chems.changeAmount(30,1); // downward tip
+			}
+			// diffusion
+			diffuse();
+			
+			// pushes
+			if(chems.amount(1) < 1)
+			{
+				if(chems.amount(2) > 0) {
+					giveChem(0, World.LIGHT,2);
+					giveChem(1, World.FOOD,1);
+					giveChem(1, World.WATER,1);
+				}
+				if(chems.amount(3) > 0) {
+					giveChem(1, World.LIGHT,1);
+					giveChem(0, World.FOOD,1);
+					giveChem(0, World.WATER,1);
+				}
+			}
+
+					
+	//		if I am the tip, make a new cell in front of me
+			Random rgen = new Random();
+			if(chems.amount(20) > 0) {
+				metabolize();
+				int x = rgen.nextInt(4)-2;
+				Position p = new Position(x, -10);
+				if(spawnCellRel(p)) {
+	//				give to cell 1 (toward tip) chemical 1 (tip marker)
+					if(giveChem(1,20) > 0)
+						chems.changeAmount(2, 1);
+				}
+			}
+			// upward
+			if(chems.amount(30) > 0) {
+				metabolize();
+				Position p = new Position(rgen.nextInt(20)-10, 10);
+				if(spawnCellRel(p)) {
+		//			give to cell 2 (toward tip) chemical 2 (tip marker)
+					int child = 1;
+					if(chems.amount(1) == 1) child = 2; // only base has 3 "arms"
+					if(giveChem(child,30) > 0)
+						chems.changeAmount(3,1);
+				}
+				
+			}
+			log(String.valueOf(chems.amount(World.ENERGY)));
+			if(arms.size() == 2) {
+				if(chems.amount(World.ENERGY) == 0) metabolize();
+				Position p = new Position(rgen.nextInt(100)-50, 0);
+				spawnCellRel(p);
+			}
+
+	
+		}

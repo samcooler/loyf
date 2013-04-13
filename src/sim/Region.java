@@ -32,7 +32,7 @@ public class Region {
 	}
 	
 	public boolean contains(Position p) {
-		return a.x < p.x & p.x < b.x & a.y < p.y & p.y < b.y;
+		return a.x <= p.x & p.x <= b.x & a.y <= p.y & p.y <= b.y;
 	}
 	
 	public void draw(Graphics g) {

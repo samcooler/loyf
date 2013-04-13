@@ -8,15 +8,18 @@ import java.awt.Stroke;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+
+import sim.Genome.GeneType;
+import sim.Value.ValueType;
 
 public class Cell {
 	
 	ChemList chems;
 	public Position pos;
 	List<Cell> arms;
+	Genome genome;
 	public int age;
 	public Double[] shadowRange;
 
@@ -28,11 +31,17 @@ public class Cell {
 		age = 0;
 		shadowRange = new Double[2];
 		shadowRange[0] = pos.x;
-		shadowRange[1] = pos.x;
+		genome = simpleGenome();
+	}
+	
+	public Cell(Cell root, Position pos_, Genome g) {
+		this(root, pos_);
+		genome = g;
+		genome.setCell(this);
 	}
 	
 	public int size() {
-		return chems.amount(World.WATER)+chems.amount(World.FOOD)+chems.amount(World.ENERGY);
+		return (int) 0.1*chems.amount(World.WATER)+chems.amount(World.FOOD);
 	}
 	
 	public Double[] shadow() {
@@ -45,10 +54,18 @@ public class Cell {
 		return shadowRange;
 	}
 	
+	public int score() {
+		int sc = 2 + chems.amount(World.ENERGY);
+		for(int i = 1; i < arms.size(); i++) {
+			sc += arms.get(i).score();
+		}
+		return sc;
+	}
+	
 
 	public boolean spawnCellAbs(Position p) {
-		if(Simulator.world.inShadow(p.x)) return false;
-		Cell c = new Cell(this, p);
+//		if(Simulator.world.inShadow(p.x)) return false;
+		Cell c = new Cell(this, p, genome);
 		log("spawning arm at "+p.x+","+p.y);
 		Simulator.world.newCells.add(c);
 		arms.add(c);
@@ -68,13 +85,16 @@ public class Cell {
 	}
 	
 	public void log(String t){
-		Simulator.world.log("\t"+t);
+		if(Simulator.LOG_CELLS) Simulator.world.log("\t"+t);
 	}
 	
 	public void draw(Graphics g)
 	{
 		Graphics2D g2 = (Graphics2D)g;
-		g2.setColor(new Color(Math.max(100,2*Math.min(age, 30)), 255-Math.min(150,age*10), 100));
+		int red = Math.max(100,2*Math.min(age, 30));
+		int green = 255-Math.min(150,age*10);
+		int blue = Math.min(255, 100+10*chems.amount(World.ENERGY)*red);
+		g2.setColor(new Color(red, green, blue));
 //		log(String.valueOf(age));
 		g2.fill(new Ellipse2D.Double(pos.x-size()/2, pos.y-size()/2, size(), size()));
 //		log("Drawing cell. diam:"+diameter+" at (" + pos.x +"," + pos.y+")");
@@ -110,7 +130,7 @@ public class Cell {
 	 * @param chem
 	 * @return success
 	 */
-	private int giveChem(int cell, int chem) {
+	private boolean giveChem(int cell, int chem) {
 		return giveChem(cell,chem,1);
 	}
 	/**
@@ -119,118 +139,91 @@ public class Cell {
 	 * @param amount
 	 * @return success
 	 */
-	private int giveChem(int cell, int chem, int amount) {
+	private boolean giveChem(int cell, int chem, int amount) {
 		Cell c = getArm(cell);
 		return giveChem(c,chem,amount);
 	}
-	private int giveChem(Cell c, int chem) {
-		return giveChem(c, chem,1);
-	}
-	private int giveChem(Cell c, int chem, int amount) {
+//	private int giveChem(Cell c, int chem) {
+//		return giveChem(c, chem,1);
+//	}
+	public boolean giveChem(Cell c, int chem, int amount) {
 		if(c != null) {
 			while(amount > 0) { // decreasing amount until it works
 				if(chems.changeAmount(chem,-1*amount)) {
 					c.chems.changeAmount(chem,amount);
-					return amount;
+					return true;
 				}
 				amount--;
 			}
 		}
-		return 0; // no amount worked
+		return false; // no amount worked
 	}
 
 	public void diffuse() {
 		for(Cell c : arms) {
 			if(c != null)
-			for(int i = -9; i < 0; i++) {
-				if(chems.amount(i) > c.chems.amount(i)) {
-					giveChem(c,i,World.DIFFUSIONRATE);
+			for(int i = -9; i < ChemList.NUMCHEMS; i++) {
+				if(chems.amount(i) > c.chems.amount(i) + 1) {
+					giveChem(c,i,1);
 				}
 			}
 		}
 	}
 	
-	public void act(boolean recurse) {
-//			log("Acting");
-			log("Arms: "+arms.size());
-			log(chems.listChems());
+	public Genome simpleGenome() {
+		Genome gene = new Genome(this, GeneType.GENOME);
 
-			// make chemical at base only, and only if none above
-			if(getArm(0) == null & getArm(1) == null) {
-				log("making growth signal at base");
-				chems.changeAmount(1,1); // base
-				chems.changeAmount(20,1); // upward tip
-				chems.changeAmount(30,1); // downward tip
-			}
+//  	if numarms < 2 spawn tip
+		Genome spawn_full = new Genome(this,GeneType.IF);
+		
+		Value ars = new Value(this,ValueType.NUMARMS);
+		Value two = new Value(this,ValueType.CONSTANT);
+		two.constant = 2;
+		Value minus = new Value(this,ValueType.NEGATIVE);
+		minus.values.add(ars);
+		Value sum = new Value(this,ValueType.SUM);
+		sum.values.add(minus);
+		sum.values.add(two);
+		spawn_full.values.add(sum);
 
-			// diffusion
-			diffuse();
-			
-			// pushes
-			if(chems.amount(1) < 1)
-			{
-				if(chems.amount(2) > 0) {
-					giveChem(0, World.LIGHT,2);
-					giveChem(1, World.FOOD,1);
-					giveChem(1, World.WATER,1);
-				}
-				if(chems.amount(3) > 0) {
-					giveChem(1, World.LIGHT,1);
-					giveChem(0, World.FOOD,1);
-					giveChem(0, World.WATER,1);
-				}
-			}
-
-					
-	//		if I am the tip, make a new cell in front of me
-			Random rgen = new Random();
-			if(chems.amount(20) > 0) {
-				metabolize();
-				int x = rgen.nextInt(4)-2;
-				Position p = new Position(x, -10);
-				if(spawnCellRel(p)) {
-	//				give to cell 1 (toward tip) chemical 1 (tip marker)
-					if(giveChem(1,20) > 0)
-						chems.changeAmount(2, 1);
-				}
-			}
-			// upward
-			if(chems.amount(30) > 0) {
-				metabolize();
-				Position p = new Position(rgen.nextInt(20)-10, 10);
-				if(spawnCellRel(p)) {
-		//			give to cell 2 (toward tip) chemical 2 (tip marker)
-					int child = 1;
-					if(chems.amount(1) == 1) child = 2; // only base has 3 "arms"
-					if(giveChem(child,30) > 0)
-						chems.changeAmount(3,1);
-				}
-				
-			}
-			log(String.valueOf(chems.amount(World.ENERGY)));
-			if(arms.size() == 2) {
-				if(chems.amount(World.ENERGY) == 0) metabolize();
-				Position p = new Position(rgen.nextInt(100)-50, 0);
-				spawnCellRel(p);
-			}
-
-				
-			
-			if(recurse) for (int i = 1; i < arms.size(); i++) {
-				getArm(i).act(true);
-			}
+		Genome spawn_tip = new Genome(this, GeneType.GENOME_SR);
+		
+		Genome mt = new Genome(this,GeneType.METABOLIZE);
+		Value mnum = new Value(this,ValueType.CONSTANT);
+		mnum.constant = 1;
+		mt.values.add(mnum);
+		spawn_tip.genes.add(mt);
+		
+		Genome spawn = new Genome(this,GeneType.SPAWNCELL_UP);
+		Value dist = new Value(this,ValueType.CONSTANT);
+		dist.constant = 10;
+		Value ang = new Value(this,ValueType.CONSTANT);
+		ang.constant = 0;
+		spawn.values.add(ang);
+		spawn.values.add(dist);
+		spawn_tip.genes.add(spawn);
+		
+		spawn_full.genes.add(spawn_tip);
+		gene.genes.add(spawn_full);
+		return gene;
+	}
 	
-		}
+	public boolean act(boolean recurse) {
+		log("Me: "+ this);
+		log("Arms: "+arms);
+		log(chems.listChems());
+		return genome.act();
+	}
 
 
-	private boolean metabolize() {
-		if(chems.amount(World.FOOD) > 0 &
-		chems.amount(World.LIGHT) > 0 &
-		chems.amount(World.WATER) > 0) {
+	public boolean metabolize() {
+		if(chems.amount(World.FOOD) > 10 &
+		chems.amount(World.LIGHT) > 10 &
+		chems.amount(World.WATER) > 10) {
 			chems.changeAmount(World.ENERGY, 1);
-			chems.changeAmount(World.FOOD, -1);
-			chems.changeAmount(World.LIGHT, -1);
-			chems.changeAmount(World.WATER, -1);
+			chems.changeAmount(World.FOOD, -10);
+			chems.changeAmount(World.LIGHT, -10);
+			chems.changeAmount(World.WATER, -10);
 			return true;
 		}
 		return false;
